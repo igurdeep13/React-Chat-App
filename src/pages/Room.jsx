@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { databases } from "../appwriteConfig";
+import client, { databases } from "../appwriteConfig";
 import { ID, Query } from "appwrite";
 import { Trash2 } from "react-feather";
 
@@ -7,13 +7,40 @@ const Room = () => {
   const [messages, setMessages] = useState([]);
   const [messageBody, setMessageBody] = useState("");
 
-  useEffect(() => {
-    getMessages();
-  }, []);
-
   const databaseID = import.meta.env.VITE_APPWRITE_DATABASE_ID;
   const collectionID = import.meta.env.VITE_APPWRITE_COLLECTION_ID;
-  //   console.log(databaseID, collectionID);
+
+  useEffect(() => {
+    getMessages();
+
+    const unsubscribe = client.subscribe(
+      `databases.${databaseID}.collections.${collectionID}.documents`,
+      (response) => {
+        console.log("Real Time:", response);
+        if (
+          response.events.includes(
+            "databases.*.collections.*.documents.*.create"
+          )
+        ) {
+          console.log("A Message was created!");
+          setMessages((prevState) => [response.payload, ...prevState]);
+        }
+        if (
+          response.events.includes(
+            "databases.*.collections.*.documents.*.delete"
+          )
+        ) {
+          console.log("A Message was deleted!");
+          setMessages((prevState) =>
+            prevState.filter((message) => message.$id !== response.payload.$id)
+          );
+        }
+      }
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,7 +57,7 @@ const Room = () => {
     );
 
     console.log("created!", response);
-    setMessages((prev) => [response, ...messages]);
+
     setMessageBody("");
   };
 
@@ -46,7 +73,6 @@ const Room = () => {
   //Delete Messages
   const deleteMessage = async (message_Id) => {
     await databases.deleteDocument(databaseID, collectionID, message_Id);
-    setMessages(() => messages.filter((message) => message.$id !== message_Id));
   };
 
   return (
